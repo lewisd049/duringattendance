@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>During Attendance</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+    input, select, button {
+      padding: 6px;
+      margin: 5px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+      border-collapse: collapse;
+      padding: 8px;
+      text-align: center;
+      background: white;
+    }
+    th {
+      background-color: #eee;
+    }
+    h2 {
+      margin-top: 0;
+    }
+    #bulkAddPopup {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border: 2px solid #ccc;
+      padding: 20px;
+      z-index: 999;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+      width: 300px;
+    }
+    textarea {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+<h2>📚 During Attendance</h2>
+
+<div>
+  <input type="text" id="newClassName" placeholder="New class name">
+  <button onclick="createClass()">Add Class</button>
+
+  <select id="classSelector" onchange="loadClassData()">
+    <option value="">-- Select Class --</option>
+  </select>
+</div>
+
+<div>
+  <input type="text" id="studentName" placeholder="Add student">
+  <button onclick="addStudent()">Add Student</button>
+  <button onclick="openBulkAdd()">➕ Bulk Add Students</button>
+</div>
+
+<div>
+  <button onclick="saveRegister()">💾 Save Register</button>
+  <select id="registerSelector">
+    <option value="">-- Select saved register --</option>
+  </select>
+  <button onclick="loadRegister()">📂 Load Register</button>
+</div>
+
+<table id="registerTable">
+  <thead>
+    <tr>
+      <th>Student Name</th>
+      <th>MOR</th>
+      <th>AFT</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<!-- Bulk Add Popup -->
+<div id="bulkAddPopup">
+  <h3>Bulk Add Students</h3>
+  <p>Enter one student name per line:</p>
+  <textarea id="bulkStudentInput" rows="10"></textarea><br><br>
+  <button onclick="addBulkStudents()">Add Students</button>
+  <button onclick="closeBulkAdd()">Cancel</button>
+</div>
+
+<script>
+const scriptURL = "https://script.google.com/macros/s/AKfycbwgdTXzP_Ef_9qXFwZIyCdFz6E5dofUfwzjHoxCLaFXjpxDDHdCVvFgITFiHrGOL0KS/exec";
+const statusOptions = ["", "TBC", "-", "HOL", "SICK", "APT"];
+let currentRegisterID = null;
+
+function createDropdown(value = "") {
+  const select = document.createElement("select");
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.text = "Please select one!";
+  select.appendChild(placeholder);
+  statusOptions.slice(1).forEach(opt => {
+    const option = document.createElement("option");
+    option.value = opt;
+    option.textContent = opt;
+    if (opt === value) option.selected = true;
+    select.appendChild(option);
+  });
+  return select;
+}
+
+function createClass() {
+  const className = document.getElementById("newClassName").value.trim();
+  if (!className) return alert("Enter class name.");
+  const selector = document.getElementById("classSelector");
+  const option = document.createElement("option");
+  option.value = className;
+  option.textContent = className;
+  selector.appendChild(option);
+  document.getElementById("newClassName").value = "";
+  alert("Class added. Select it from the list to use.");
+}
+
+function addStudent() {
+  const name = document.getElementById("studentName").value.trim();
+  if (!name) return alert("Enter student name.");
+  const table = document.querySelector("#registerTable tbody");
+  const row = table.insertRow();
+  row.insertCell(0).textContent = name;
+  row.insertCell(1).appendChild(createDropdown());
+  row.insertCell(2).appendChild(createDropdown());
+  document.getElementById("studentName").value = "";
+}
+
+function saveRegister() {
+  const className = document.getElementById("classSelector").value;
+  if (!className) return alert("Please select a class.");
+  const now = new Date();
+  const registerID = currentRegisterID || now.toLocaleString("en-GB").replace(/[/,: ]/g, "-");
+
+  const table = document.querySelector("#registerTable tbody");
+  const students = [];
+  for (let i = 0; i < table.rows.length; i++) {
+    const row = table.rows[i];
+    students.push({
+      name: row.cells[0].textContent,
+      MOR: row.cells[1].querySelector("select").value,
+      AFT: row.cells[2].querySelector("select").value
+    });
+  }
+
+  fetch(scriptURL, {
+    method: "POST",
+    body: JSON.stringify({
+      type: "save",
+      className,
+      registerID,
+      students
+    })
+  })
+  .then(res => res.text())
+  .then(() => {
+    currentRegisterID = registerID;
+    alert("Register saved.");
+    loadRegisterList(className);
+  });
+
+  const namesOnly = students.map(s => s.name);
+  fetch(scriptURL, {
+    method: "POST",
+    body: JSON.stringify({
+      type: "saveStudents",
+      className,
+      students: namesOnly
+    })
+  });
+}
+
+function loadClassData() {
+  const className = document.getElementById("classSelector").value;
+  if (!className) return;
+  currentRegisterID = null;
+  const table = document.querySelector("#registerTable tbody");
+  table.innerHTML = "";
+
+  fetch(scriptURL, {
+    method: "POST",
+    body: JSON.stringify({
+      type: "students",
+      className
+    })
+  })
+  .then(res => res.json())
+  .then(students => {
+    if (students.length === 0) {
+      alert("This class has no saved students yet.");
+    }
+    students.forEach(name => {
+      const row = table.insertRow();
+      row.insertCell(0).textContent = name;
+      row.insertCell(1).appendChild(createDropdown());
+      row.insertCell(2).appendChild(createDropdown());
+    });
+  });
+
+  loadRegisterList(className);
+}
+
+function loadRegisterList(className) {
+  const selector = document.getElementById("registerSelector");
+  selector.innerHTML = `<option value="">-- Select saved register --</option>`;
+  fetch(scriptURL, {
+    method: "POST",
+    body: JSON.stringify({
+      type: "list",
+      className
+    })
+  })
+  .then(res => res.json())
+  .then(registers => {
+    registers.forEach(id => {
+      if (id !== "studentList") {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = id;
+        selector.appendChild(opt);
+      }
+    });
+  });
+}
+
+function loadRegister() {
+  const className = document.getElementById("classSelector").value;
+  const registerID = document.getElementById("registerSelector").value;
+  if (!className || !registerID) return alert("Select class and register.");
+  fetch(scriptURL, {
+    method: "POST",
+    body: JSON.stringify({
+      type: "load",
+      className,
+      registerID
+    })
+  })
+  .then(res => res.json())
+  .then(students => {
+    const table = document.querySelector("#registerTable tbody");
+    table.innerHTML = "";
+    students.forEach(s => {
+      const row = table.insertRow();
+      row.insertCell(0).textContent = s.name;
+      row.insertCell(1).appendChild(createDropdown(s.MOR));
+      row.insertCell(2).appendChild(createDropdown(s.AFT));
+    });
+    currentRegisterID = registerID;
+  });
+}
+
+function openBulkAdd() {
+  document.getElementById("bulkStudentInput").value = "";
+  document.getElementById("bulkAddPopup").style.display = "block";
+}
+
+function closeBulkAdd() {
+  document.getElementById("bulkAddPopup").style.display = "none";
+}
+
+function addBulkStudents() {
+  const input = document.getElementById("bulkStudentInput").value.trim();
+  if (!input) return alert("Please enter student names.");
+  const names = input.split("\n").map(name => name.trim()).filter(name => name);
+  const table = document.querySelector("#registerTable tbody");
+
+  names.forEach(name => {
+    const row = table.insertRow();
+    row.insertCell(0).textContent = name;
+    row.insertCell(1).appendChild(createDropdown());
+    row.insertCell(2).appendChild(createDropdown());
+  });
+
+  closeBulkAdd();
+}
+</script>
+
+</body>
+</html>
