@@ -37,9 +37,20 @@
     textarea {
       width: 100%;
     }
+    #signOutBtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 6px 12px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
+
+<button id="signOutBtn" onclick="signOut()">🔓 Sign Out</button>
+
+<div id="mainContent" style="display:none;">
 
 <h2>📚 During Attendance</h2>
 
@@ -86,10 +97,25 @@
   <button onclick="closeBulkAdd()">Cancel</button>
 </div>
 
+</div> <!-- END mainContent -->
+
 <script>
 const scriptURL = "https://script.google.com/macros/s/AKfycbwgdTXzP_Ef_9qXFwZIyCdFz6E5dofUfwzjHoxCLaFXjpxDDHdCVvFgITFiHrGOL0KS/exec";
 const statusOptions = ["", "TBC", "-", "HOL", "SICK", "APT"];
 let currentRegisterID = null;
+
+// Check login
+if (localStorage.getItem("duringAuth") === "true") {
+  document.getElementById("mainContent").style.display = "block";
+} else {
+  alert("Access denied. Please login first.");
+  window.location.href = "index.html";
+}
+
+function signOut() {
+  localStorage.removeItem("duringAuth");
+  window.location.href = "index.html";
+}
 
 function createDropdown(value = "") {
   const select = document.createElement("select");
